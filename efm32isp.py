@@ -4,6 +4,7 @@ from xmodem import XMODEM
 import sys,os
 import time
 import serial
+import argparse
 
 
 RESP_ERR = "unexpected response!"
@@ -63,13 +64,21 @@ def upload(ser,path):
 
 
 def main(args):
-    PORT = "/dev/ttyUSB0"
-    BAUD = 57600
-    MAIN = "bin/main.bin"
-    ser = serial.Serial(PORT, BAUD, timeout=0, parity=serial.PARITY_NONE)
+
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("-p","--port", help="The UART port, (any valid pyserial string), default=/dev/ttyUSB0")
+    arg_parser.add_argument("-b","--baud", help="Baud rate to use, default=57600", type=int)
+    arg_parser.add_argument("binfile", help="Path to the binary to flash")
+    argp = arg_parser.parse_args()
+
+    if not argp.port:
+        argp.port = "/dev/ttyUSB0"
+    if not argp.baud:
+        argp.baud = 57600
+    ser = serial.Serial(argp.port, argp.baud, timeout=0, parity=serial.PARITY_NONE)
     ser.open()
     if not ser.isOpen():
-        sys.stderr.write("Couldn't open serial port '" + PORT + "'!\n")
+        sys.stderr.write("Couldn't open serial port '" + argp.port + "'!\n")
         sys.exit(1)
 
     sys.stdout.write("Put the chip into bootloader mode!\n")
@@ -93,7 +102,7 @@ def main(args):
     INFO("") #newline
 
     handle_init(resp)
-    upload(ser,MAIN)
+    upload(ser,argp.binfile)
 
 
     
