@@ -12,7 +12,7 @@ Prerequisites
  * python2 v2.7 or newer (xmodem and pyserial are not python3 compatible!)
  * xmodem-library (https://pypi.python.org/pypi/xmodem)
  * pyserial (https://pypi.python.org/pypi/pyserial)
- * docopt (http://docopt.org/)
+ * docopt (https://pypi.python.org/pypi/docopt/0.6.1)
 
 Usage
 -----
