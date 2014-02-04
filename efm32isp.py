@@ -4,7 +4,7 @@ from xmodem import XMODEM
 import sys,os
 import time
 import serial
-import argparse
+from docopt import docopt
 
 
 RESP_ERR = "unexpected response!"
@@ -62,24 +62,21 @@ def upload(ser,path):
     ser.setTimeout(0)
     ser.setWriteTimeout(0)
 
-
 def main(args):
+    """
+    Usage:
+        efm32isp [options] <binfile>
 
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument("-p","--port", help="The UART port, (any valid pyserial string), default=/dev/ttyUSB0")
-    arg_parser.add_argument("-b","--baud", help="Baud rate to use, default=57600", type=int)
-    arg_parser.add_argument("binfile", help="Path to the binary to flash")
-    argp = arg_parser.parse_args()
-
-    if not argp.port:
-        argp.port = "/dev/ttyUSB0"
-    if not argp.baud:
-        argp.baud = 57600
-    ser = serial.Serial(argp.port, argp.baud, timeout=0, parity=serial.PARITY_NONE)
+    Options:
+        -h --help                 Prints this help message
+        -p <port>, --port=<port>  Sets the UART port, any valid pyserial string is possible [default: /dev/ttyUSB0].
+        -b <port>, --baud=<baud>  Sets the UART baud rate [default: 57600].
+    """
+    argp = docopt(main.__doc__,version="efm32isp 2014-02-04")
+    ser = serial.Serial(argp["--port"], argp["--baud"], timeout=0, parity=serial.PARITY_NONE)
     ser.open()
     if not ser.isOpen():
-        sys.stderr.write("Couldn't open serial port '" + argp.port + "'!\n")
-        sys.exit(1)
+        ERR("Couldn't open serial port '" + argp.port + "'",1)
 
     sys.stdout.write("Put the chip into bootloader mode!\n")
     sys.stdout.write("Waiting for bootloader to respond ")
@@ -105,9 +102,7 @@ def main(args):
     upload(ser,argp.binfile)
 
 
-    
+
 if __name__ == "__main__":
     main(sys.argv)
 
-
-#"1.60 ChipID: 20353500503EBB68"
