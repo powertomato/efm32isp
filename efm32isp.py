@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 
 from xmodem import XMODEM
-import sys,os
+import sys,os,os.path
 import time
 import serial
 from docopt import docopt
@@ -33,7 +33,8 @@ def handle_init(resp):
     lines = resp.split("\r\n")
     CHK( lines[0]=='', RESP_ERR,3)
     CHK( lines[1]=='', RESP_ERR,3)
-    CHK( len(lines[2])==29, RESP_ERR,3)
+    CHK( "ChipID" in lines[2], RESP_ERR,3)
+
 
     version,ignore,chipid = lines[2].split(" ")
     # line 3 is glitch due to UART-baud reconfiguration of bootloader
@@ -44,8 +45,12 @@ def handle_init(resp):
 
 
 def upload(ser,path):
-    f = open(path,"rb")
+    try:
+        f = open(path,"rb")
+    except IOError:
+        CHK( False, "'%s': can't open file" % path,5)
 
+    # upload command
     ser.write('u')
 
     def ser_write(msg,timeout=1):
@@ -62,6 +67,9 @@ def upload(ser,path):
     ser.setTimeout(0)
     ser.setWriteTimeout(0)
 
+    # reset command
+    ser.write('r')
+
 def main(args):
     """
     Usage:
@@ -69,14 +77,18 @@ def main(args):
 
     Options:
         -h --help                 Prints this help message
-        -p <port>, --port=<port>  Sets the UART port, any valid pyserial string is possible [default: /dev/ttyUSB0].
+        -p <port>, --port=<port>  Sets the UART port, any valid pyserial string is 
+                                  possible [default: /dev/ttyUSB0].
         -b <port>, --baud=<baud>  Sets the UART baud rate [default: 57600].
     """
     argp = docopt(main.__doc__,version="efm32isp 2014-02-04")
-    ser = serial.Serial(argp["--port"], argp["--baud"], timeout=0, parity=serial.PARITY_NONE)
-    ser.open()
+    try:
+        ser = serial.Serial(argp["--port"], argp["--baud"], timeout=0, parity=serial.PARITY_NONE)
+        ser.open()
+    except serial.serialutil.SerialException:
+        ERR("Couldn't open serial port '" + argp["--port"] + "'",1)
     if not ser.isOpen():
-        ERR("Couldn't open serial port '" + argp.port + "'",1)
+        ERR("Couldn't open serial port '" + argp["--port"] + "'",1)
 
     sys.stdout.write("Put the chip into bootloader mode!\n")
     sys.stdout.write("Waiting for bootloader to respond ")
@@ -99,7 +111,7 @@ def main(args):
     INFO("") #newline
 
     handle_init(resp)
-    upload(ser,argp.binfile)
+    upload(ser,argp["<binfile>"])
 
 
 
