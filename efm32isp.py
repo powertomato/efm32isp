@@ -1,5 +1,8 @@
 #!/usr/bin/env python2
 
+import logging
+logging.getLogger("xmodem")
+
 from xmodem import XMODEM
 import sys,os,os.path
 import time
@@ -31,27 +34,27 @@ def get_response(ser):
 
 def handle_init(resp):
     lines = resp.split("\r\n")
-    CHK( lines[0]=='', RESP_ERR,3)
-    CHK( lines[1]=='', RESP_ERR,3)
-    CHK( "ChipID" in lines[2], RESP_ERR,3)
+    while '' in lines:
+        lines.remove('')
 
+    CHK( "ChipID" in lines[0], RESP_ERR,3)
 
-    version,ignore,chipid = lines[2].split(" ")
-    # line 3 is glitch due to UART-baud reconfiguration of bootloader
-    CHK( lines[4]=='?', RESP_ERR,4)
-
+    version,ignore,chipid = lines[0].split(" ")
     INFO( "Bootloader version: '%s' ChipID: '%s'" % (version,chipid) )
     return (version,chipid)
 
 
-def upload(ser,path):
+def upload(ser,path,destructive=False):
     try:
         f = open(path,"rb")
     except IOError:
         CHK( False, "'%s': can't open file" % path,5)
 
     # upload command
-    ser.write('u')
+    if destructive:
+        ser.write('d')
+    else:
+        ser.write('u')
 
     def ser_write(msg,timeout=1):
         ser.setWriteTimeout(timeout)
@@ -77,16 +80,18 @@ def main(args):
 
     Options:
         -h --help                 Prints this help message
+        -d                        Destructive upload, overwrites the bootloader
         -p <port>, --port=<port>  Sets the UART port, any valid pyserial string is 
                                   possible [default: /dev/ttyUSB0].
-        -b <port>, --baud=<baud>  Sets the UART baud rate [default: 57600].
+        -b <port>, --baud=<baud>  Sets the UART baud rate [default: 115200].
     """
-    argp = docopt(main.__doc__,version="efm32isp 2014-02-04")
+    argp = docopt(main.__doc__,version="efm32isp 2014-02-24")
     try:
         ser = serial.Serial(argp["--port"], argp["--baud"], timeout=0, parity=serial.PARITY_NONE)
-        ser.open()
-    except serial.serialutil.SerialException:
-        ERR("Couldn't open serial port '" + argp["--port"] + "'",1)
+        if not ser.isOpen():
+            ser.open()
+    except serial.serialutil.SerialException as ex:
+        ERR("Couldn't open serial port '" + argp["--port"] + "'" + os.linesep + str(ex),1)
     if not ser.isOpen():
         ERR("Couldn't open serial port '" + argp["--port"] + "'",1)
 
@@ -111,7 +116,7 @@ def main(args):
     INFO("") #newline
 
     handle_init(resp)
-    upload(ser,argp["<binfile>"])
+    upload(ser,argp["<binfile>"],argp["-d"])
 
 
 
