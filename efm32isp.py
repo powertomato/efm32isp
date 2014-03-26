@@ -70,9 +70,47 @@ def upload(ser,path,destructive=False):
     ser.setTimeout(0)
     ser.setWriteTimeout(0)
 
+    verify(ser,path)
     # reset command
     ser.write('r')
 
+def verify(ser,path):
+    try:
+        f = open(path,"rb")
+    except IOError:
+        CHK( False, "'%s': can't open file" % path,5)
+    data = f.read()
+    flashsize = 0x100000
+    bootloadersize = 0x3000
+
+    f.close()
+    modem = XMODEM(None,None)
+
+
+    ser.write('c')
+    lines = []
+    resp=""
+    while len(lines)<3:
+        resp+=get_response(ser)
+        lines = resp.split('\r\n')
+    CHK( lines[1].startswith("CRC:" ), RESP_ERR, 3 )
+    testcrc=lines[1][9:]
+
+    crc = int(modem.calc_crc(data))
+    # rest of the flash is zeros
+    ppos = 0
+    for i in xrange( flashsize-len(data)-bootloadersize+1 ):
+        crc = modem.calc_crc( '\xFF',crc )
+        hcrc = hex(crc)[2:].upper()
+        if hcrc == testcrc:
+            pos = i+bootloadersize+len(data)
+            print ppos-pos
+            ppos = pos
+
+
+    crc = hex(crc)[2:].upper()
+    print crc, testcrc
+    CHK( testcrc == crc, "Verify failed", 6 ) #TODO retry and stuff
 def main(args):
     """
     Usage:
