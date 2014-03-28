@@ -44,50 +44,67 @@ def handle_init(resp):
     return (version,chipid)
 
 
-def upload(ser,path,destructive=False):
-    try:
-        f = open(path,"rb")
-    except IOError:
-        CHK( False, "'%s': can't open file" % path,5)
+def upload(ser,path,flashsize,bootloadersize,shouldverify=True,destructive=False):
+    run = True
+    while run:
+        try:
+            f = open(path,"rb")
+        except IOError:
+            CHK( False, "'%s': can't open file" % path,5)
 
-    # upload command
-    if destructive:
-        ser.write('d')
-    else:
-        ser.write('u')
+        # upload command
+        if destructive:
+            ser.write('d')
+        else:
+            ser.write('u')
 
-    def ser_write(msg,timeout=1):
-        ser.setWriteTimeout(timeout)
-        return ser.write(msg)
+        def ser_write(msg,timeout=1):
+            ser.setWriteTimeout(timeout)
+            return ser.write(msg)
 
-    def ser_read(size,timeout=1):
-        ser.setTimeout(timeout)
-        return ser.read(size)
+        def ser_read(size,timeout=1):
+            ser.setTimeout(timeout)
+            return ser.read(size)
 
-    modem = XMODEM(ser_read, ser_write)
-    modem.send(f)
+        modem = XMODEM(ser_read, ser_write, pad='\xff')
+        modem.send(f)
+        f.close()
 
-    ser.setTimeout(0)
-    ser.setWriteTimeout(0)
+        ser.setTimeout(0)
+        ser.setWriteTimeout(0)
 
-    verify(ser,path)
+        if shouldverify:
+            run = not verify(ser,path,flashsize,bootloadersize,destructive)
+            if run: #verify failed
+                input_ok = False
+                while not input_ok:
+                    tmp = raw_input( "Verify failed! Retry? [Y|n]" )
+                    if   len(tmp)==0 or (len(tmp)==1 and tmp[0].upper=='Y'):
+                        input_ok = True
+                    elif len(tmp)==1 and tmp[0].upper=='N':
+                        CHK( False, "Verify failed! Uploaded programm may be inconsistent!", 6)
+        else:
+            run = False
     # reset command
     ser.write('r')
 
-def verify(ser,path):
+def verify(ser,path,flashsize,bootloadersize,destructive=False):
     try:
         f = open(path,"rb")
     except IOError:
         CHK( False, "'%s': can't open file" % path,5)
     data = f.read()
-    flashsize = 0x100000
-    bootloadersize = 0x3000
 
     f.close()
     modem = XMODEM(None,None)
 
+    if destructive:
+        ser.write('v')
+        #no prefixed bytes, since uploading a bootloader
+        bootloadersize = 0x0000 
+    else:
+        ser.write('c')
 
-    ser.write('c')
     lines = []
     resp=""
     while len(lines)<3:
@@ -97,33 +114,32 @@ def verify(ser,path):
     testcrc=lines[1][9:]
 
     crc = int(modem.calc_crc(data))
-    # rest of the flash is zeros
-    ppos = 0
-    for i in xrange( flashsize-len(data)-bootloadersize+1 ):
+    # rest of the flash is 0xFF
+    for i in xrange( flashsize-len(data)-bootloadersize ):
         crc = modem.calc_crc( '\xFF',crc )
-        hcrc = hex(crc)[2:].upper()
-        if hcrc == testcrc:
-            pos = i+bootloadersize+len(data)
-            print ppos-pos
-            ppos = pos
-
 
     crc = hex(crc)[2:].upper()
-    print crc, testcrc
-    CHK( testcrc == crc, "Verify failed", 6 ) #TODO retry and stuff
+    if testcrc == crc:
+        INFO("Verify OK!")
+    return testcrc == crc
+
 def main(args):
     """
     Usage:
-        efm32isp [options] <binfile>
+        efm32isp [(--verify|--noverify)] [options] <binfile>
 
     Options:
-        -h --help                 Prints this help message
-        -d                        Destructive upload, overwrites the bootloader
-        -p <port>, --port=<port>  Sets the UART port, any valid pyserial string is 
-                                  possible [default: /dev/ttyUSB0].
-        -b <port>, --baud=<baud>  Sets the UART baud rate [default: 115200].
+        -h --help                  Prints this help message
+        -d                         Destructive upload, overwrites the bootloader
+        -p <port>, --port=<port>   Sets the UART port, any valid pyserial string is 
+                                   possible [default: /dev/ttyUSB0].
+        -b <port>, --baud=<baud>   Sets the UART baud rate [default: 115200].
+        -f <size>, --flashs=<size> Sets the programmflash size of the MCU (needed for 
+                                   verify) [default: 0x100000]
+        -s <size>, --boots=<size>  Sets the size reserved for the bootloader (needed
+                                   non destructive verify) [default: 0x3000]
     """
-    argp = docopt(main.__doc__,version="efm32isp 2014-02-24")
+    argp = docopt(main.__doc__,version="efm32isp 2014-03-28")
     try:
         ser = serial.Serial(argp["--port"], argp["--baud"], timeout=0, parity=serial.PARITY_NONE)
         if not ser.isOpen():
@@ -154,9 +170,22 @@ def main(args):
     INFO("") #newline
 
     handle_init(resp)
-    upload(ser,argp["<binfile>"],argp["-d"])
-
-
+    if argp["--verify"]:
+        # only a verify
+        verify(
+            ser, 
+            argp["<binfile>"], 
+            int(argp["--flashs"],16), 
+            int(argp["--boots"],16), 
+            argp["-d"])
+    else:
+        upload(
+            ser, 
+            argp["<binfile>"], 
+            int(argp["--flashs"],16), 
+            int(argp["--boots"],16), 
+            not argp["--noverify"], 
+            argp["-d"])
 
 if __name__ == "__main__":
     main(sys.argv)
