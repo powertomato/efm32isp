@@ -1,14 +1,10 @@
 #!/usr/bin/env python2
 
-import logging
-logging.getLogger("xmodem")
-
 from xmodem import XMODEM
 import sys,os,os.path
 import time
 import serial
 from docopt import docopt
-
 
 RESP_ERR = "unexpected response!"
 def ERR(msg,ecode=0):
@@ -22,7 +18,6 @@ def INFO(msg):
 def CHK(bval, msg, ecode=0):
     if not bval:
         ERR(msg,ecode)
-
 
 def get_response(ser):
     answer = ""
@@ -79,9 +74,10 @@ def upload(ser,path,flashsize,bootloadersize,shouldverify=True,destructive=False
                 input_ok = False
                 while not input_ok:
                     tmp = raw_input( "Verify failed! Retry? [Y|n]" )
-                    if   len(tmp)==0 or (len(tmp)==1 and tmp[0].upper=='Y'):
+                    if  len(tmp) == 0 or tmp.upper() == 'Y':
                         input_ok = True
-                    elif len(tmp)==1 and tmp[0].upper=='N':
+                    elif tmp.upper() == 'N':
+                        input_ok = True
                         CHK( False, "Verify failed! Uploaded programm may be inconsistent!", 6)
         else:
             run = False
@@ -101,7 +97,7 @@ def verify(ser,path,flashsize,bootloadersize,destructive=False):
     if destructive:
         ser.write('v')
         #no prefixed bytes, since uploading a bootloader
-        bootloadersize = 0x0000 
+        bootloadersize = 0x0000
     else:
         ser.write('c')
 
@@ -119,6 +115,9 @@ def verify(ser,path,flashsize,bootloadersize,destructive=False):
         crc = modem.calc_crc( '\xFF',crc )
 
     crc = hex(crc)[2:].upper()
+    #extend to 4 chars
+    crc = (4-len(crc))*"0"+crc
+    print "CRC",crc,testcrc
     if testcrc == crc:
         INFO("Verify OK!")
     return testcrc == crc
@@ -131,10 +130,10 @@ def main(args):
     Options:
         -h --help                  Prints this help message
         -d                         Destructive upload, overwrites the bootloader
-        -p <port>, --port=<port>   Sets the UART port, any valid pyserial string is 
+        -p <port>, --port=<port>   Sets the UART port, any valid pyserial string is
                                    possible [default: /dev/ttyUSB0].
         -b <port>, --baud=<baud>   Sets the UART baud rate [default: 115200].
-        -f <size>, --flashs=<size> Sets the programmflash size of the MCU (needed for 
+        -f <size>, --flashs=<size> Sets the programmflash size of the MCU (needed for
                                    verify) [default: 0x100000]
         -s <size>, --boots=<size>  Sets the size reserved for the bootloader (needed
                                    non destructive verify) [default: 0x3000]
@@ -173,18 +172,18 @@ def main(args):
     if argp["--verify"]:
         # only a verify
         verify(
-            ser, 
-            argp["<binfile>"], 
-            int(argp["--flashs"],16), 
-            int(argp["--boots"],16), 
+            ser,
+            argp["<binfile>"],
+            int(argp["--flashs"],16),
+            int(argp["--boots"],16),
             argp["-d"])
     else:
         upload(
-            ser, 
-            argp["<binfile>"], 
-            int(argp["--flashs"],16), 
-            int(argp["--boots"],16), 
-            not argp["--noverify"], 
+            ser,
+            argp["<binfile>"],
+            int(argp["--flashs"],16),
+            int(argp["--boots"],16),
+            not argp["--noverify"],
             argp["-d"])
 
 if __name__ == "__main__":
